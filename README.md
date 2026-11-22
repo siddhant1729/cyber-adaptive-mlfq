@@ -13,6 +13,8 @@ The simulator compares the adaptive scheduler against FCFS, Round Robin and a
 classic CPU-burst MLFQ on the **same workload**, under four scenarios: no attack,
 DDoS, credential stuffing and mixed.
 
+> New to the code? Start with **[walkthrough.md](walkthrough.md)**: a viva demo script, one request traced through the code, and live experiments.
+
 **Headline result** (`./cmlfq --generate --scenarios`, seed 42, 50 legit + 200 attack requests):
 
 | Legit avg wait (ticks) | FCFS | RR | MLFQ | **Adaptive-MLFQ** |
