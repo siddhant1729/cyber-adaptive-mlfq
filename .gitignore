@@ -1,0 +1,14 @@
+# build artefacts
+build/
+cmlfq
+*.o
+
+# generated results (keep the folder)
+results/*
+!results/.gitkeep
+
+# editor / OS noise
+.vscode/
+.idea/
+*.swp
+.DS_Store
