@@ -2,12 +2,14 @@
 #include "app.h"
 
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <sstream>
 
 #include "adaptive_mlfq.h"
 #include "baselines.h"
 #include "examples.h"
+#include "json_export.h"
 #include "workload.h"
 
 namespace cmlfq {
@@ -56,6 +58,7 @@ bool App::parseArgs(int argc, char** argv, std::string& err) {
         else if (a == "--config")            { if (!value(opt_.configPath)) return false; opt_.configExplicit = true; }
         else if (a == "--workload")          { if (!value(opt_.workloadFile)) return false; }
         else if (a == "--save-workload")     { if (!value(opt_.saveWorkloadFile)) return false; }
+        else if (a == "--json")              { if (!value(opt_.jsonFile)) return false; }
         else if (a == "--generate")          opt_.generate = true;
         else if (a == "--legit")             { if (!number(n, 0)) return false; opt_.gen.legit = static_cast<int>(n); }
         else if (a == "--bots")              { if (!number(n, 0)) return false; opt_.gen.bots = static_cast<int>(n); }
@@ -107,6 +110,7 @@ Output:
   --gantt                  ASCII Gantt chart(s)
   --csv                    write CSV files to results/
   --verbose, -v            per-process tables in --compare mode
+  --json FILE              also write full results as JSON (used by the web UI in ui/)
 
 Overrides of config.ini:
   --config FILE            settings file (default ./config.ini)
@@ -184,6 +188,7 @@ void App::runSingle(const std::string& key) {
 
 void App::runCompare() {
     std::vector<Metrics> all;
+    std::vector<SimResult> sims;
     std::vector<std::pair<std::string, Metrics>> rows;
     std::string err;
     for (const auto& key : kAllSchedulers) {
@@ -196,6 +201,12 @@ void App::runCompare() {
             std::cerr << "error: " << err << "\n";
         all.push_back(m);
         rows.emplace_back(workloadLabel_, m);
+        if (!opt_.jsonFile.empty()) sims.push_back(std::move(r));
+    }
+    if (!opt_.jsonFile.empty()) {
+        std::ofstream js(opt_.jsonFile);
+        if (js) writeCompareJson(js, workloadLabel_, cfg_, workload_, haveIngestion_ ? &ingestion_ : nullptr, sims, all);
+        else std::cerr << "error: cannot write " << opt_.jsonFile << "\n";
     }
     reporter_.comparison(all);
     for (const auto& m : all) if (m.securityAware) { std::cout << "\n"; reporter_.securityReport(m); }
@@ -235,6 +246,11 @@ void App::runScenarios() {
         results.push_back(row);
     }
     reporter_.scenarioTables(names, results);
+    if (!opt_.jsonFile.empty()) {
+        std::ofstream js(opt_.jsonFile);
+        if (js) writeScenariosJson(js, opt_.gen, cfg_, names, results);
+        else std::cerr << "error: cannot write " << opt_.jsonFile << "\n";
+    }
     if (opt_.csv) {
         std::string err;
         if (reporter_.writeSummaryCsv(rows, "scenarios_summary.csv", err))

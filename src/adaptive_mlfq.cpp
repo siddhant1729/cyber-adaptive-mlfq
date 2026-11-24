@@ -26,7 +26,11 @@ void AdaptiveMLFQScheduler::applyAssessment(PCB* p, const ThreatAssessment& a) {
     p->peakThreatScore = std::max(p->peakThreatScore, a.score);
 }
 
-void AdaptiveMLFQScheduler::changeLevel(PCB* p, int newLevel, Tick now) {
+void AdaptiveMLFQScheduler::changeLevel(PCB* p, int newLevel, Tick now, const char* kind) {
+    if (newLevel != p->queueLevel)
+        result_->events.push_back({now, p->pid, p->queueLevel, newLevel,
+                                   kind ? kind : (newLevel > p->queueLevel ? "demote" : "promote"),
+                                   p->threatScore});
     if (newLevel > p->queueLevel) {           // moving DOWN in priority
         ++p->demotionCount;
         ++result_->demotions;
@@ -87,11 +91,13 @@ void AdaptiveMLFQScheduler::enqueue(PCB* p, Reason why, Tick now) {
             p->maxLevelReached = p->queueLevel;
             p->lastLevelChangeTick = now;
             if (p->queueLevel == Q2) p->isolatedAt = now;
+            if (p->queueLevel != Q0)
+                result_->events.push_back({now, p->pid, -1, p->queueLevel, "arrive", a.score});
             live_[p->pid] = p;
             break;
         }
         case Reason::SECURITY:
-            changeLevel(p, Q2, now);             // forced off the CPU -> quarantine
+            changeLevel(p, Q2, now, "forced-preempt");             // forced off the CPU -> quarantine
             break;
         case Reason::QUANTUM_EXPIRED:
         case Reason::PREEMPTED:
@@ -194,7 +200,7 @@ void AdaptiveMLFQScheduler::onTick(Tick now, PCB* running) {
         // ---- anti-starvation for the quarantine queue ----
         if (cfg_.starvationAging && p->queueLevel == Q2 &&
             now - p->readySinceTick >= cfg_.starvationLimit) {
-            changeLevel(p, Q1, now);
+            changeLevel(p, Q1, now, "boost");
             p->lastPromotionTick = now;
             p->agingShield = true;
             ++result_->starvationBoosts;

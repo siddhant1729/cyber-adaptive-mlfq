@@ -40,8 +40,28 @@ make            # builds ./cmlfq   (-std=c++17 -Wall -Wextra -O2 -pthread, zero 
 make test       # builds and runs the unit tests (hand-computed expectations)
 make run        # full comparison on a generated mixed attack
 make scenarios  # the no-attack / DDoS / stuffing / mixed sweep
+make ui         # web UI at http://localhost:8000 (needs python3, standard library only)
 make clean
 ```
+
+### Web UI (for demos)
+
+```bash
+make ui                      # or: python3 ui/server.py   ->  http://localhost:8000
+```
+
+A browser front end for the same C++ program (Python standard library only, nothing to install).
+Every button runs `./cmlfq ... --json` and draws the result:
+
+- **Overview**: headline numbers, wait-time chart, arrivals-per-source plot, full comparison table
+- **Live replay**: play the simulation tick by tick: what is on the CPU, what waits in Q0 / Q1 / Q2, and each security decision as it happens
+- **Gantt charts**: all four schedulers on one zoomable time axis (scroll to zoom, drag to pan, hover for details)
+- **Security log**: per-source verdicts, time-to-isolate, and every demotion / promotion / forced preemption
+- **Scenarios**: the none / DDoS / stuffing / mixed sweep as a chart
+- **Custom**: type in your own processes (or add a bot burst) and run them
+- **Terminal output**: the exact command executed and its raw output
+
+`./cmlfq --compare --json FILE` and `./cmlfq --scenarios --json FILE` can also be used on their own.
 
 ### Command line
 
@@ -69,6 +89,7 @@ make clean
 | `--gantt` | ASCII Gantt chart (truncated to `gantt_max_segments`) |
 | `--csv` | write per-process and summary CSVs to `results/` |
 | `-v`, `--verbose` | per-process tables in `--compare` mode |
+| `--json FILE` | also write full results (Gantt, per-process, security events) as JSON |
 | `--config FILE` | settings file (default `./config.ini`) |
 | `--quantum N`, `--cs-cost N`, `--window N`, `--no-starvation-aging` | override config values |
 
@@ -162,6 +183,8 @@ makes producers block constantly.
 | Reporter | `include/reporter.h`, `src/reporter.cpp` | `iomanip` tables, ASCII Gantt, CSV export |
 | App | `include/app.h`, `src/app.cpp`, `src/main.cpp` | CLI parsing, batch modes, interactive menu |
 | Examples | `include/examples.h`, `src/examples.cpp` | Hand-computable workloads shared by tests and the menu |
+| JSON export | `include/json_export.h`, `src/json_export.cpp` | `--json` output (metrics, Gantt, per-process data, security event log) for the web UI |
+| Web UI | `ui/server.py`, `ui/index.html` | Stdlib Python server that runs `./cmlfq --json` and a single-page viewer |
 
 ### The engine loop (`Scheduler::run`)
 
@@ -383,9 +406,10 @@ src/                implementation (one .cpp per module) + main.cpp
 tests/              test_main.cpp, manual_verification.md
 workloads/          hand_basic.txt, hand_security.txt, hand_config.ini,
                     none|ddos|stuffing|mixed_seed42.txt  (saved generated workloads)
+ui/                 server.py (stdlib HTTP server) + index.html (web UI, no dependencies)
 results/            CSV output (--csv)
 config.ini          thresholds, weights, quanta, generator settings
-Makefile            all, test, run, scenarios, clean
+Makefile            all, test, run, scenarios, ui, clean
 ```
 
 Workload file format (`#` starts a comment):

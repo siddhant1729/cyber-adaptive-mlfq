@@ -1,0 +1,917 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cyber-Adaptive MLFQ — Scheduler Simulator</title>
+<style>
+:root {
+  --bg: #f4f6fa; --panel: #fff; --ink: #1b2333; --muted: #667085; --line: #e3e7ef;
+  --accent: #3157d5; --accent-soft: #e8edfc;
+  --legit: #2f7fd8; --mal: #d9483b; --q0: #1f9d6b; --q1: #e0a21b; --q2: #d9483b;
+  --switch: #5b6475; --idle: #d7dbe3;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: var(--bg); }
+header { background: #121a2c; color: #fff; padding: 14px 24px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+header h1 { margin: 0; font-size: 19px; font-weight: 650; letter-spacing: .2px; }
+header .sub { color: #a9b4cc; font-size: 13px; }
+header .status { margin-left: auto; font-size: 12px; color: #a9b4cc; font-family: var(--mono); }
+.layout { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 18px; padding: 18px; align-items: start; }
+@media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+aside { position: sticky; top: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.card h3 { margin: 0 0 10px; font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); font-weight: 650; }
+label.f { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 7px 0; font-size: 13px; }
+label.f input[type=number], label.f select { width: 120px; }
+input[type=number], select, input[type=text] { font: inherit; padding: 5px 7px; border: 1px solid #cfd5e1; border-radius: 6px; background: #fff; }
+input:disabled, select:disabled { background: #f1f3f7; color: #9aa3b3; }
+button { font: inherit; cursor: pointer; border-radius: 7px; border: 1px solid #cfd5e1; background: #fff; padding: 6px 12px; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; width: 100%; padding: 9px; margin-top: 6px; }
+button.primary:hover { background: #2747b3; }
+button.ghost { width: 100%; margin-top: 6px; padding: 8px; }
+button:disabled { opacity: .55; cursor: wait; }
+.seg { display: flex; border: 1px solid #cfd5e1; border-radius: 7px; overflow: hidden; margin-bottom: 8px; }
+.seg button { flex: 1; white-space: nowrap; border: 0; border-radius: 0; padding: 6px 4px; font-size: 13px; background: #fff; }
+.seg button + button { border-left: 1px solid #cfd5e1; }
+.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.hint { color: var(--muted); font-size: 12px; margin: 4px 0 0; }
+.err { color: #b42318; background: #fef3f2; border: 1px solid #fecdca; padding: 8px 10px; border-radius: 7px; font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 14px; flex-wrap: wrap; }
+.tabs button { border: 0; background: none; border-radius: 0; padding: 9px 14px; color: var(--muted); font-weight: 550; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+.tab { display: none; } .tab.on { display: block; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.kpi .v { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi .l { font-size: 12px; color: var(--muted); }
+.kpi .d { font-size: 12px; margin-top: 2px; }
+.good { color: #13795b; } .bad { color: #b42318; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 9px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; background: #fafbfd; position: sticky; top: 0; }
+th.sort { cursor: pointer; } th.sort:hover { color: var(--accent); }
+td.best { color: #13795b; font-weight: 700; }
+tr.sep td { background: #fafbfd; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; text-align: left; }
+.scroll { max-height: 520px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.pill { display: inline-block; padding: 1px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+.pill.L { background: #e6f0fb; color: var(--legit); } .pill.M { background: #fdecea; color: var(--mal); }
+.pill.q0 { background: #e3f5ee; color: var(--q0); } .pill.q1 { background: #fdf3dc; color: #a87505; } .pill.q2 { background: #fdecea; color: var(--q2); }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.row .grow { flex: 1; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.gantt-block { margin-bottom: 12px; }
+.gantt-block .name { font-weight: 650; font-size: 13px; margin-bottom: 3px; display: flex; gap: 10px; align-items: baseline; }
+.gantt-block .name span { font-weight: 400; color: var(--muted); font-size: 12px; }
+canvas { display: block; width: 100%; }
+#tip { position: fixed; pointer-events: none; background: #121a2c; color: #fff; font-size: 12px; padding: 6px 9px; border-radius: 6px; display: none; z-index: 10; max-width: 300px; line-height: 1.4; }
+pre.term { background: #0f1522; color: #d5ddee; font: 12px/1.4 var(--mono); padding: 14px; border-radius: 8px; overflow: auto; max-height: 640px; margin: 0; }
+.empty { text-align: center; color: var(--muted); padding: 60px 20px; }
+.empty b { color: var(--ink); }
+/* live replay */
+.replay { display: grid; grid-template-columns: 200px 1fr; gap: 14px; }
+.cpu { border: 2px solid var(--ink); border-radius: 10px; padding: 12px; text-align: center; min-height: 140px; display: flex; flex-direction: column; justify-content: center; }
+.cpu .big { font-size: 30px; font-weight: 800; font-family: var(--mono); }
+.cpu.L { border-color: var(--legit); background: #f2f7fd; } .cpu.M { border-color: var(--mal); background: #fef5f4; }
+.cpu.sw { border-color: var(--switch); border-style: dashed; } .cpu.idle { border-color: var(--idle); color: var(--muted); }
+.lane { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; min-height: 52px; }
+.lane .t { font-size: 12px; font-weight: 650; margin-bottom: 5px; display: flex; justify-content: space-between; }
+.lane .t span { color: var(--muted); font-weight: 400; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font: 11px var(--mono); padding: 2px 5px; border-radius: 4px; color: #fff; }
+.chip.L { background: var(--legit); } .chip.M { background: var(--mal); }
+.feed { font: 12px/1.5 var(--mono); max-height: 170px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: #fafbfd; }
+.feed div.now { background: #fff6d6; }
+input[type=range] { width: 100%; }
+.explain p { margin: 6px 0 10px; } .explain code { font-family: var(--mono); background: #f1f3f7; padding: 1px 5px; border-radius: 4px; font-size: 12.5px; }
+.formula { font: 14px var(--mono); background: #f6f8fc; border: 1px solid var(--line); padding: 10px 14px; border-radius: 8px; margin: 8px 0; }
+.qgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px 0; }
+.qbox { border-radius: 8px; padding: 10px 12px; border: 1px solid var(--line); }
+.qbox h4 { margin: 0 0 4px; font-size: 14px; }
+.custom td { padding: 3px 4px; } .custom input { width: 100%; padding: 3px 5px; }
+.custom input[type=checkbox] { width: auto; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+@media (max-width: 1200px) { .two { grid-template-columns: 1fr; } }
+svg text { font-family: system-ui, sans-serif; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Cyber-Adaptive MLFQ</h1>
+  <div class="sub">Security-aware CPU scheduling for high-frequency trading systems: OS Lab project simulator</div>
+  <div class="status" id="status">ready</div>
+</header>
+
+<div class="layout">
+<aside>
+  <div class="card">
+    <h3>1 · Workload</h3>
+    <div class="seg" id="srcSeg">
+      <button data-v="generate" class="on">Generate</button>
+      <button data-v="file">File</button>
+      <button data-v="custom">Custom</button>
+    </div>
+    <div id="src-generate">
+      <label class="f">Attack type
+        <select id="attack">
+          <option value="none">No attack</option>
+          <option value="ddos">DDoS</option>
+          <option value="stuffing">Credential stuffing</option>
+          <option value="mixed" selected>Mixed</option>
+        </select></label>
+      <label class="f">Legit requests <input type="number" id="legit" value="50" min="0" max="2000"></label>
+      <label class="f">Attack requests <input type="number" id="bots" value="200" min="0" max="5000"></label>
+      <label class="f">Random seed <input type="number" id="seed" value="42" min="0"></label>
+      <p class="hint">Generated by the multi-threaded producer/consumer ingestion layer (one thread per source).</p>
+    </div>
+    <div id="src-file" style="display:none">
+      <label class="f">File <select id="file" style="width:170px"></select></label>
+      <p class="hint">Files in <code>workloads/</code>. The hand examples work best with the hand-example settings below.</p>
+    </div>
+    <div id="src-custom" style="display:none">
+      <p class="hint" style="margin:0 0 6px">Type your own processes in the <b>Custom</b> tab on the right.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>2 · Settings</h3>
+    <label class="f">Quantum (Q0 / RR) <input type="number" id="quantum" value="2" min="1"></label>
+    <label class="f">Context-switch cost <input type="number" id="csCost" value="1" min="0"></label>
+    <label class="f">Security window <input type="number" id="window" value="50" min="1"></label>
+    <label class="f">Q2 anti-starvation <input type="checkbox" id="starv" checked></label>
+    <label class="f" title="workloads/hand_config.ini">Hand-example settings <input type="checkbox" id="handCfg"></label>
+    <p class="hint">Times are in ticks (1 tick = 1 simulated µs).</p>
+  </div>
+
+  <div class="card">
+    <h3>3 · Run</h3>
+    <button class="primary" id="runCompare">▶ Compare all 4 schedulers</button>
+    <button class="ghost" id="runScen">Run attack-scenario sweep</button>
+    <div id="err"></div>
+  </div>
+</aside>
+
+<main>
+  <div class="tabs" id="tabs">
+    <button data-t="overview" class="on">Overview</button>
+    <button data-t="replay">Live replay</button>
+    <button data-t="gantt">Gantt charts</button>
+    <button data-t="security">Security log</button>
+    <button data-t="procs">Processes</button>
+    <button data-t="scen">Scenarios</button>
+    <button data-t="custom">Custom</button>
+    <button data-t="term">Terminal output</button>
+    <button data-t="how">How it works</button>
+  </div>
+
+  <!-- OVERVIEW -->
+  <section class="tab on" id="t-overview">
+    <div id="ov-empty" class="empty"><b>Press "Compare all 4 schedulers"</b> to run the C++ simulator.<br>
+      FCFS, Round Robin, classic MLFQ and Adaptive MLFQ all run on the same workload.</div>
+    <div id="ov" style="display:none">
+      <div class="kpis" id="kpis"></div>
+      <div class="two">
+        <div class="card"><h3>Average waiting time (ticks): lower is better</h3><div id="chartWait"></div>
+          <div class="legend"><span><i style="background:var(--legit)"></i>Legit traders</span><span><i style="background:var(--mal)"></i>Attack requests</span></div></div>
+        <div class="card"><h3>Workload: arrivals per source over time</h3><canvas id="arrivals" height="260"></canvas>
+          <div class="legend"><span><i style="background:var(--legit)"></i>Legit request</span><span><i style="background:var(--mal)"></i>Attack request</span></div></div>
+      </div>
+      <div class="card"><h3>Full comparison</h3><div class="scroll" style="max-height:none"><table id="cmpTable"></table></div></div>
+    </div>
+  </section>
+
+  <!-- REPLAY -->
+  <section class="tab" id="t-replay">
+    <div class="empty need-data">Run a comparison first.</div>
+    <div class="has-data" style="display:none">
+      <div class="row">
+        <select id="rpSched"></select>
+        <button id="rpPlay" style="width:90px">▶ Play</button>
+        <button id="rpStep">+1 tick</button>
+        <label>Speed <select id="rpSpeed"><option value="1">1×</option><option value="4" selected>4×</option><option value="15">15×</option><option value="50">50×</option></select></label>
+        <div class="grow"></div>
+        <b id="rpTime" style="font-family:var(--mono);font-size:16px">t = 0</b>
+      </div>
+      <input type="range" id="rpSlider" min="0" max="100" value="0">
+      <div class="replay" style="margin-top:12px">
+        <div>
+          <div class="cpu" id="rpCpu"></div>
+          <div class="card" style="margin-top:12px;padding:10px 12px" id="rpStats"></div>
+        </div>
+        <div>
+          <div id="rpLanes"></div>
+          <div class="card" style="padding:10px 12px"><h3 id="rpFeedTitle">Security decisions</h3><div class="feed" id="rpFeed"></div></div>
+        </div>
+      </div>
+      <div class="card"><h3>Timeline</h3><canvas id="rpGantt" height="90"></canvas></div>
+    </div>
+  </section>
+
+  <!-- GANTT -->
+  <section class="tab" id="t-gantt">
+    <div class="empty need-data">Run a comparison first.</div>
+    <div class="has-data" style="display:none">
+      <div class="row">
+        <div class="seg" id="colorSeg" style="margin:0"><button data-v="class" class="on">Legit / attack</button><button data-v="pid">Per process</button></div>
+        <button id="zoomFit">Show all</button>
+        <button id="zoomIn">Zoom +</button><button id="zoomOut">Zoom −</button>
+        <div class="grow"></div>
+        <span class="hint">Scroll to zoom · drag to pan · hover for details</span>
+      </div>
+      <div class="legend" style="margin-bottom:10px"><span><i style="background:var(--legit)"></i>Legit</span><span><i style="background:var(--mal)"></i>Attack</span><span><i style="background:var(--switch)"></i>Context switch (bottom strip)</span><span><i style="background:var(--idle)"></i>CPU idle</span><span>Multi-level schedulers: rows = Q0 / Q1 / Q2</span></div>
+      <div class="card" id="ganttList"></div>
+    </div>
+  </section>
+
+  <!-- SECURITY -->
+  <section class="tab" id="t-security">
+    <div class="empty need-data">Run a comparison first.</div>
+    <div class="has-data" style="display:none">
+      <div class="kpis" id="secKpis"></div>
+      <div>
+        <div class="card"><h3>Per-source verdicts (Adaptive MLFQ)</h3><div class="scroll" style="max-height:440px"><table id="srcTable"></table></div></div>
+        <div class="card"><h3>Queue-change events</h3>
+          <div class="row"><select id="evFilter"><option value="">All events</option><option>arrive</option><option>demote</option><option>forced-preempt</option><option>promote</option><option>boost</option></select>
+            <select id="evClass"><option value="">Legit + attack</option><option value="L">Legit only</option><option value="M">Attack only</option></select>
+            <span class="hint" id="evCount"></span></div>
+          <div class="scroll" style="max-height:400px"><table id="evTable"></table></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROCESSES -->
+  <section class="tab" id="t-procs">
+    <div class="empty need-data">Run a comparison first.</div>
+    <div class="has-data" style="display:none">
+      <div class="row"><select id="prSched"></select>
+        <select id="prClass"><option value="">All processes</option><option value="L">Legit only</option><option value="M">Attack only</option></select>
+        <input type="text" id="prSearch" placeholder="filter by source…" style="width:180px">
+        <span class="hint" id="prCount"></span></div>
+      <div class="scroll" style="max-height:640px"><table id="prTable"></table></div>
+    </div>
+  </section>
+
+  <!-- SCENARIOS -->
+  <section class="tab" id="t-scen">
+    <div id="sc-empty" class="empty"><b>Press "Run attack-scenario sweep"</b> to run all 4 attack types × all 4 schedulers<br>(uses the legit / attack / seed values from the Generate panel).</div>
+    <div id="sc" style="display:none">
+      <div class="card"><h3>Legit average waiting time per scenario (ticks)</h3>
+        <div class="row"><label><input type="checkbox" id="scLog" checked> log scale</label>
+          <select id="scMetric"><option value="legit.avgWait">Legit avg wait</option><option value="legit.p95Wait">Legit P95 wait</option><option value="legit.avgResponse">Legit avg response</option><option value="malicious.avgWait">Attack avg wait</option><option value="contextSwitches">Context switches</option><option value="cpuUtilization">CPU utilisation %</option></select></div>
+        <div id="scChart"></div><div class="legend" id="scLegend"></div></div>
+      <div class="card"><h3>Table</h3><div class="scroll" style="max-height:none"><table id="scTable"></table></div></div>
+    </div>
+  </section>
+
+  <!-- CUSTOM -->
+  <section class="tab" id="t-custom">
+    <div class="card">
+      <h3>Custom workload: type in your own processes</h3>
+      <p class="hint" style="margin-top:0">Each row is one request (process). <b>Source</b> is the client IP / API token: requests from the same source share one threat score.
+        <b>Anomaly</b> (0–1) is how unusual the payload looks. The <b>Attack</b> box is ground truth for the report only; the schedulers never read it.</p>
+      <div class="row">
+        <button id="cuExB">Load example B (bot among traders)</button>
+        <button id="cuExA">Load example A (5 processes)</button>
+        <button id="cuBot">+ Add a bot burst</button>
+        <button id="cuAdd">+ Add row</button>
+        <button id="cuClear">Clear</button>
+        <div class="grow"></div>
+        <button class="primary" id="cuRun" style="width:auto;margin:0;padding:7px 16px">▶ Run this workload</button>
+      </div>
+      <table class="custom"><thead><tr><th>PID</th><th style="text-align:left">Source</th><th>Arrival</th><th>Burst</th><th>Anomaly</th><th>Attack?</th><th></th></tr></thead><tbody id="cuBody"></tbody></table>
+    </div>
+  </section>
+
+  <!-- TERMINAL -->
+  <section class="tab" id="t-term">
+    <div class="empty need-data">Run something first. The raw output of the C++ program appears here.</div>
+    <div class="has-data" style="display:none">
+      <p style="margin-top:0">Command executed: <code id="cmd" style="font-family:var(--mono);background:#e8edfc;padding:2px 6px;border-radius:4px"></code></p>
+      <pre class="term" id="stdout"></pre>
+    </div>
+  </section>
+
+  <!-- HOW -->
+  <section class="tab explain" id="t-how">
+    <div class="card">
+      <h3>The idea</h3>
+      <p>A classic MLFQ moves processes between queues based on <b>CPU usage</b>. In a trading system under attack that does not help:
+        bot requests are short, so a classic MLFQ treats them as the most interactive jobs of all. <b>Cyber-Adaptive MLFQ</b> moves processes
+        based on the <b>behaviour of their source</b> (IP or API token) instead.</p>
+      <div class="qgrid">
+        <div class="qbox" style="background:#eefaf4"><h4 style="color:var(--q0)">Q0 · Verified human</h4>Round Robin with a micro-quantum (<span class="cfg" data-k="quantum"></span> ticks). Highest priority.</div>
+        <div class="qbox" style="background:#fdf7e6"><h4 style="color:#a87505">Q1 · Suspicious</h4>Non-preemptive Shortest-Job-First. Runs only when Q0 is empty.</div>
+        <div class="qbox" style="background:#fdf0ee"><h4 style="color:var(--q2)">Q2 · Quarantine</h4>FCFS by arrival. Runs <b>only when Q0 and Q1 are both empty</b>.</div>
+      </div>
+      <h3 style="margin-top:16px">Threat score (re-computed every tick for every live process)</h3>
+      <div class="formula">score = <span class="cfg" data-k="wVelocity"></span>·velocity + <span class="cfg" data-k="wFrequency"></span>·frequency + <span class="cfg" data-k="wAnomaly"></span>·anomaly</div>
+      <p><b>velocity</b> = requests from the source in the last <span class="cfg" data-k="windowTicks"></span> ticks (sliding window, a <code>std::deque</code>), normalised by a cap of <span class="cfg" data-k="velocityCap"></span> req/tick.<br>
+         <b>frequency</b> = lifetime requests from the source, normalised by <span class="cfg" data-k="frequencyCap"></span>.<br>
+         <b>anomaly</b> = mean payload anomaly (0–1) in the window. Catches failed-login patterns in credential stuffing.</p>
+      <p>score ≥ <b><span class="cfg" data-k="maliciousThreshold"></span></b> → <span class="pill q2">MALICIOUS → Q2</span> immediately; a running process is <b>forcibly preempted</b>.<br>
+         score ≥ <b><span class="cfg" data-k="suspiciousThreshold"></span></b> → <span class="pill q1">SUSPICIOUS → Q1</span> after its current quantum.<br>
+         otherwise → <span class="pill q0">CLEAN → Q0</span>.</p>
+      <h3 style="margin-top:16px">Feedback rules</h3>
+      <p><b>Aging / promotion:</b> a source that stays calm for <span class="cfg" data-k="promotionAgingTicks"></span> ticks moves up one level. A source that was ever malicious can only climb back to Q<span class="cfg" data-k="rehabCeiling"></span>, so a bot's queued backlog never floods the fast lane.<br>
+         <b>Anti-starvation:</b> a process waiting <span class="cfg" data-k="starvationLimit"></span> ticks in Q2 is boosted to Q1 (on/off in Settings).<br>
+         <b>CPU usage never demotes</b> a process here. That is the key difference from the classic MLFQ.</p>
+      <h3 style="margin-top:16px">What runs where</h3>
+      <p>The whole simulation is the C++17 program <code>./cmlfq</code>: a deterministic discrete-clock engine with four pluggable schedulers and real
+        producer/consumer threads for ingestion. This page is only a viewer. Each button runs the binary with <code>--json</code> and draws the result.
+        The exact command and its terminal output are in the <b>Terminal output</b> tab.</p>
+    </div>
+  </section>
+</main>
+</div>
+<div id="tip"></div>
+
+<script>
+"use strict";
+// ------------------------------------------------------------------ helpers
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+const el = (tag, attrs = {}, html = "") => { const e = document.createElement(tag); Object.assign(e, attrs); if (html) e.innerHTML = html; return e; };
+const fmt = (v, d = 2) => (v === null || v === undefined || isNaN(v)) ? "–" : (Number.isInteger(v) ? String(v) : v.toFixed(d));
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const SHORT = { "FCFS": "FCFS", "RR": "Round Robin", "MLFQ": "Classic MLFQ", "Adaptive-MLFQ": "Adaptive MLFQ" };
+const SCOLORS = ["#8a94a6", "#5b8def", "#b07cd8", "#1f9d6b"];
+
+let D = null;      // compare result
+let S = null;      // scenario result
+let P = {};        // pid -> workload entry
+let source = "generate";
+
+// ------------------------------------------------------------------ UI wiring
+function segControl(id, cb) {
+  $$(`#${id} button`).forEach((b) => b.onclick = () => {
+    $$(`#${id} button`).forEach((x) => x.classList.toggle("on", x === b));
+    cb(b.dataset.v);
+  });
+}
+segControl("srcSeg", (v) => {
+  source = v;
+  ["generate", "file", "custom"].forEach((k) => $("#src-" + k).style.display = k === v ? "" : "none");
+  if (v === "custom") showTab("custom");
+  if (v === "file" && /^hand_/.test($("#file").value)) $("#handCfg").checked = true, syncHand();
+});
+$("#file").onchange = () => { $("#handCfg").checked = /^hand_/.test($("#file").value); syncHand(); };
+function syncHand() { ["quantum", "csCost", "window", "starv"].forEach((k) => $("#" + k).disabled = $("#handCfg").checked); }
+$("#handCfg").onchange = syncHand;
+
+function showTab(t) {
+  $$("#tabs button").forEach((b) => b.classList.toggle("on", b.dataset.t === t));
+  $$(".tab").forEach((s) => s.classList.toggle("on", s.id === "t-" + t));
+  if (t === "gantt") drawAllGantts();
+  if (t === "replay") renderReplay();
+  if (t === "overview" && D) drawArrivals();
+}
+$$("#tabs button").forEach((b) => b.onclick = () => showTab(b.dataset.t));
+
+function settings() {
+  return {
+    quantum: +$("#quantum").value, csCost: +$("#csCost").value, window: +$("#window").value,
+    starvationAging: $("#starv").checked, handConfig: $("#handCfg").checked,
+    attack: $("#attack").value, legit: +$("#legit").value, bots: +$("#bots").value, seed: +$("#seed").value,
+  };
+}
+
+async function api(path, body) {
+  $("#err").innerHTML = "";
+  $$("button.primary, button.ghost").forEach((b) => b.disabled = true);
+  $("#status").textContent = "running ./cmlfq …";
+  const t0 = performance.now();
+  try {
+    const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || "request failed");
+    $("#status").textContent = `done in ${((performance.now() - t0) / 1000).toFixed(2)} s`;
+    return j;
+  } catch (e) {
+    $("#err").appendChild(el("div", { className: "err" }, esc(e.message)));
+    $("#status").textContent = "error";
+    throw e;
+  } finally {
+    $$("button.primary, button.ghost").forEach((b) => b.disabled = false);
+  }
+}
+
+$("#runCompare").onclick = () => runCompare();
+async function runCompare() {
+  const body = { ...settings(), source };
+  if (source === "file") body.file = $("#file").value;
+  if (source === "custom") body.rows = customRows();
+  const data = await api("/api/compare", body);
+  loadCompare(data);
+}
+$("#runScen").onclick = async () => {
+  const data = await api("/api/scenarios", settings());
+  S = data; renderScenarios(); setTerminal(data); showTab("scen");
+};
+
+function setTerminal(data) {
+  $("#cmd").textContent = data.command;
+  $("#stdout").textContent = data.stdout + (data.stderr ? "\n[stderr]\n" + data.stderr : "");
+  $("#t-term .need-data").style.display = "none";
+  $("#t-term .has-data").style.display = "";
+}
+
+// ------------------------------------------------------------------ load compare
+function loadCompare(data) {
+  D = data;
+  P = {}; data.workload.forEach((w) => P[w.pid] = w);
+  data.results.forEach((r) => {
+    r.procMap = {}; r.procs.forEach((p) => r.procMap[p.pid] = p);
+    r.gantt = r.gantt.map(([kind, pid, level, start, end]) => ({ kind, pid, level, start, end }));
+    r.events = r.events.map(([tick, pid, from, to, kind, score]) => ({ tick, pid, from, to, kind, score }));
+  });
+  D.makespan = Math.max(...data.results.map((r) => r.metrics.makespan), 1);
+  $$(".need-data").forEach((e) => e.style.display = "none");
+  $$(".has-data").forEach((e) => e.style.display = "");
+  $("#ov-empty").style.display = "none"; $("#ov").style.display = "";
+  fillConfig(data.config);
+  setTerminal(data);
+  ["#rpSched", "#prSched"].forEach((s) => {
+    $(s).innerHTML = data.results.map((r, i) => `<option value="${i}">${SHORT[r.name] || r.name}</option>`).join("");
+    $(s).value = String(data.results.length - 1);
+  });
+  view = { t0: 0, t1: D.makespan };
+  rp.t = 0; rp.playing = false; $("#rpPlay").textContent = "▶ Play";
+  buildReplayIndex();
+  renderOverview(); renderSecurity(); renderProcs(); buildGantts();
+  const active = $("#tabs button.on").dataset.t;
+  showTab(["custom", "how", "scen", "term"].includes(active) ? "overview" : active);
+}
+
+function fillConfig(c) { $$(".cfg").forEach((e) => e.textContent = c[e.dataset.k]); }
+
+// ------------------------------------------------------------------ overview
+function renderOverview() {
+  const R = D.results, ad = R.find((r) => r.securityAware), base = R.filter((r) => !r.securityAware);
+  const m = ad.metrics, hasAttack = m.malicious.count > 0;
+  const worst = base.reduce((a, b) => (b.metrics.legit.avgWait > a.metrics.legit.avgWait ? b : a));
+  const best = base.reduce((a, b) => (b.metrics.legit.avgWait < a.metrics.legit.avgWait ? b : a));
+  const ratio = m.legit.avgWait > 0 ? best.metrics.legit.avgWait / m.legit.avgWait : null;
+  const fp = m.legitThrottled + m.legitFalseQuarantine;
+  const kp = [
+    { v: fmt(m.legit.avgWait), l: "Legit avg wait: Adaptive MLFQ (ticks)",
+      d: `best baseline: ${SHORT[best.name]} ${fmt(best.metrics.legit.avgWait)} · worst: ${SHORT[worst.name]} ${fmt(worst.metrics.legit.avgWait)}` },
+    { v: ratio === null ? "–" : (ratio >= 1 ? fmt(ratio, 1) + "×" : fmt(ratio, 2) + "×"), l: "Legit speed-up vs best baseline",
+      d: ratio === null ? "" : ratio >= 1.05 ? `<span class="good">legit traders wait ${fmt(ratio, 1)}× less</span>` : "no attack pressure: similar to RR", cls: ratio >= 1.05 ? "good" : "" },
+    hasAttack ? { v: `${m.botSourcesIsolated}/${m.botSources}`, l: "Attack sources isolated (reached Q2)",
+      d: m.botSourcesIsolated ? `time-to-isolate avg ${fmt(m.avgTimeToIsolate)} ticks (min ${m.minTimeToIsolate}, max ${m.maxTimeToIsolate})` : "" } :
+      { v: "0", l: "Attack requests in workload", d: "control run: no bots" },
+    { v: String(fp), l: "False positives (legit throttled / quarantined)",
+      d: fp === 0 ? `<span class="good">no legit request was penalised</span>` : `<span class="bad">${m.legitThrottled} throttled, ${m.legitFalseQuarantine} quarantined</span>`, cls: fp ? "bad" : "good" },
+    hasAttack ? { v: `${m.maliciousContained}/${m.malicious.count}`, l: "Attack requests contained (Q1 or Q2)", d: `${m.maliciousQuarantined} quarantined · ${m.forcedPreemptions} forced preemptions` } : null,
+    { v: String(D.workload.length), l: `Processes · workload "${D.label}"`, d: D.ingestion ? `${D.ingestion.producerThreads} producer threads, peak buffer ${D.ingestion.peakBuffer}` : "loaded from file" },
+  ].filter(Boolean);
+  $("#kpis").innerHTML = kp.map((k) => `<div class="kpi"><div class="v ${k.cls || ""}">${k.v}</div><div class="l">${k.l}</div><div class="d">${k.d}</div></div>`).join("");
+
+  // wait chart
+  const cats = R.map((r) => SHORT[r.name]);
+  const series = [{ name: "Legit", color: css("--legit"), values: R.map((r) => r.metrics.legit.avgWait) }];
+  if (hasAttack) series.push({ name: "Attack", color: css("--mal"), values: R.map((r) => r.metrics.malicious.avgWait) });
+  $("#chartWait").innerHTML = hbars(cats, series);
+
+  // comparison table
+  const rows = [
+    ["Waiting time"], ["Avg wait (all)", (x) => x.all.avgWait, "min"], ["Avg wait (legit)", (x) => x.legit.avgWait, "min"],
+    ["Avg wait (attack)", (x) => x.malicious.avgWait], ["P95 wait (legit)", (x) => x.legit.p95Wait, "min"], ["Max wait (legit)", (x) => x.legit.maxWait, "min"],
+    ["Turnaround & response"], ["Avg turnaround (legit)", (x) => x.legit.avgTurnaround, "min"], ["Avg response (legit)", (x) => x.legit.avgResponse, "min"],
+    ["Avg turnaround (all)", (x) => x.all.avgTurnaround, "min"], ["Avg response (all)", (x) => x.all.avgResponse, "min"],
+    ["System"], ["Throughput (/1000 ticks)", (x) => x.throughput, "max"], ["CPU utilisation %", (x) => x.cpuUtilization, "max"],
+    ["Context switches", (x) => x.contextSwitches, "min"], ["… loading attack processes", (x) => x.csOnMalicious], ["Makespan (ticks)", (x) => x.makespan, "min"],
+    ["Last legit finish", (x) => x.legit.lastFinish, "min"],
+  ];
+  let h = `<tr><th>Metric</th>${R.map((r) => `<th>${SHORT[r.name]}</th>`).join("")}</tr>`;
+  for (const [label, f, better] of rows) {
+    if (!f) { h += `<tr class="sep"><td colspan="${R.length + 1}">${label}</td></tr>`; continue; }
+    const vals = R.map((r) => f(r.metrics));
+    const target = better === "min" ? Math.min(...vals) : better === "max" ? Math.max(...vals) : null;
+    h += `<tr><td>${label}</td>${vals.map((v) => `<td class="${target !== null && v === target ? "best" : ""}">${fmt(v)}</td>`).join("")}</tr>`;
+  }
+  $("#cmpTable").innerHTML = h;
+  drawArrivals();
+}
+
+function hbars(cats, series) {
+  const W = 560, rowH = 22 * series.length + 14, padL = 118, padR = 70, H = cats.length * rowH + 10;
+  const max = Math.max(1e-9, ...series.flatMap((s) => s.values));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  cats.forEach((c, i) => {
+    const y0 = i * rowH + 6;
+    svg += `<text x="${padL - 8}" y="${y0 + rowH / 2}" text-anchor="end" font-size="13" font-weight="${c === "Adaptive MLFQ" ? 700 : 400}" dominant-baseline="middle">${c}</text>`;
+    series.forEach((s, j) => {
+      const v = s.values[i], w = Math.max(1, (W - padL - padR) * v / max), y = y0 + j * 22;
+      svg += `<rect x="${padL}" y="${y}" width="${w}" height="18" rx="3" fill="${s.color}"><title>${s.name}: ${fmt(v)}</title></rect>`;
+      svg += `<text x="${padL + w + 6}" y="${y + 9}" font-size="12" dominant-baseline="middle" fill="#444">${fmt(v)}</text>`;
+    });
+  });
+  return svg + "</svg>";
+}
+
+function setupCanvas(cv, h) {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth || cv.parentElement.clientWidth;
+  cv.width = w * dpr; cv.height = h * dpr; cv.style.height = h + "px";
+  const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  return { ctx, w, h };
+}
+
+function drawArrivals() {
+  const cv = $("#arrivals");
+  if (!D || !cv.offsetParent) return;
+  const srcs = [...new Set(D.workload.map((w) => w.source))];
+  const first = {}; D.workload.forEach((w) => { if (!(w.source in first)) first[w.source] = w; });
+  srcs.sort((a, b) => (first[a].malicious - first[b].malicious) || (first[a].arrival - first[b].arrival));
+  const idx = Object.fromEntries(srcs.map((s, i) => [s, i]));
+  const { ctx, w, h } = setupCanvas(cv, 260);
+  const padL = 34, padB = 22, padT = 6, tmax = Math.max(1, ...D.workload.map((x) => x.arrival)) * 1.02;
+  const rowH = (h - padB - padT) / Math.max(1, srcs.length);
+  ctx.clearRect(0, 0, w, h);
+  D.workload.forEach((x) => {
+    const X = padL + (w - padL - 6) * x.arrival / tmax, Y = padT + idx[x.source] * rowH + rowH / 2;
+    ctx.fillStyle = x.malicious ? css("--mal") : css("--legit");
+    ctx.fillRect(X - 1.5, Y - Math.max(1, Math.min(3, rowH / 2)), 3, Math.max(2, Math.min(6, rowH)));
+  });
+  axis(ctx, padL, w - 6, h - padB, 0, tmax);
+  ctx.save(); ctx.fillStyle = "#667085"; ctx.font = "11px system-ui"; ctx.translate(11, (h - padB) / 2); ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = "center"; ctx.fillText(`${srcs.length} sources`, 0, 0); ctx.restore();
+}
+
+function niceStep(range, px) {
+  const raw = range / Math.max(1, px / 80), p = Math.pow(10, Math.floor(Math.log10(raw)));
+  for (const m of [1, 2, 5, 10]) if (m * p >= raw) return Math.max(1, m * p);
+  return 10 * p;
+}
+function axis(ctx, x0, x1, y, t0, t1) {
+  ctx.strokeStyle = "#c9cfdb"; ctx.fillStyle = "#667085"; ctx.font = "11px system-ui"; ctx.textAlign = "center";
+  ctx.beginPath(); ctx.moveTo(x0, y + .5); ctx.lineTo(x1, y + .5); ctx.stroke();
+  const step = niceStep(t1 - t0, x1 - x0);
+  for (let t = Math.ceil(t0 / step) * step; t <= t1; t += step) {
+    const x = x0 + (x1 - x0) * (t - t0) / (t1 - t0);
+    ctx.beginPath(); ctx.moveTo(x + .5, y); ctx.lineTo(x + .5, y + 4); ctx.stroke();
+    ctx.fillText(String(Math.round(t)), x, y + 15);
+  }
+}
+
+// ------------------------------------------------------------------ gantt
+let view = { t0: 0, t1: 100 }, colorMode = "class";
+segControl("colorSeg", (v) => { colorMode = v; drawAllGantts(); });
+const pidColor = (pid) => `hsl(${(pid * 137.508) % 360} 62% ${P[pid] && P[pid].malicious ? 46 : 52}%)`;
+function segColor(s) {
+  if (s.kind === "switch") return css("--switch");
+  if (s.kind === "idle") return css("--idle");
+  if (colorMode === "pid") return pidColor(s.pid);
+  return P[s.pid] && P[s.pid].malicious ? css("--mal") : css("--legit");
+}
+function segAt(g, t) {   // binary search: segment with start <= t < end
+  let lo = 0, hi = g.length - 1;
+  while (lo <= hi) { const m = (lo + hi) >> 1; if (g[m].end <= t) lo = m + 1; else if (g[m].start > t) hi = m - 1; else return g[m]; }
+  return null;
+}
+
+function buildGantts() {
+  const list = $("#ganttList"); list.innerHTML = "";
+  D.results.forEach((r, i) => {
+    const b = el("div", { className: "gantt-block" });
+    const m = r.metrics;
+    b.innerHTML = `<div class="name">${SHORT[r.name]}<span>legit avg wait ${fmt(m.legit.avgWait)} · ${m.contextSwitches} context switches · makespan ${m.makespan}</span></div>`;
+    const cv = el("canvas"); cv.dataset.i = i; b.appendChild(cv); list.appendChild(b);
+    attachGanttEvents(cv, () => r, () => view, (v) => { view = v; drawAllGantts(); });
+  });
+  drawAllGantts();
+}
+function drawAllGantts() {
+  if (!D) return;
+  $$("#ganttList canvas").forEach((cv) => drawGantt(cv, D.results[+cv.dataset.i], view, null));
+}
+
+function drawGantt(cv, r, v, playhead) {
+  if (!cv.offsetParent) return;
+  const lanes = r.multiLevel ? 3 : 1, laneH = r.multiLevel ? 20 : 36, padL = 34, top = 4, strip = 5;
+  const H = top + lanes * laneH + strip + 26;
+  const { ctx, w } = setupCanvas(cv, H);
+  const x1 = w - 8, span = v.t1 - v.t0, X = (t) => padL + (x1 - padL) * (t - v.t0) / span;
+  ctx.clearRect(0, 0, w, H);
+  ctx.font = "10px system-ui"; ctx.fillStyle = "#98a2b3"; ctx.textAlign = "right"; ctx.textBaseline = "middle";
+  for (let l = 0; l < lanes; l++) {
+    ctx.fillStyle = l % 2 ? "#fafbfd" : "#f4f6fa"; ctx.fillRect(padL, top + l * laneH, x1 - padL, laneH);
+    ctx.fillStyle = "#98a2b3"; ctx.fillText(lanes > 1 ? "Q" + l : "CPU", padL - 5, top + l * laneH + laneH / 2);
+  }
+  ctx.textAlign = "center";
+  for (const s of r.gantt) {
+    if (s.end <= v.t0 || s.start >= v.t1) continue;
+    const a = Math.max(padL, X(s.start)), b = Math.min(x1, X(s.end)), wd = Math.max(1, b - a);
+    let y, hh;
+    if (s.kind === "switch") { y = top + lanes * laneH + 1; hh = strip; }           // switches: thin strip under the lanes
+    else if (s.kind === "idle") { y = top + 1; hh = lanes * laneH - 2; }
+    else if (lanes > 1) { y = top + s.level * laneH + 1; hh = laneH - 2; }
+    else { y = top + 2; hh = laneH - 4; }
+    ctx.fillStyle = segColor(s);
+    if (s.kind === "switch") { ctx.fillRect(a, y, wd, hh); }
+    else if (s.kind === "idle") { ctx.fillStyle = "#e9ecf2"; ctx.fillRect(a, y, wd, hh); }
+    else { ctx.fillRect(a, y, wd, hh); if (wd > 3) { ctx.fillStyle = "rgba(255,255,255,.8)"; ctx.fillRect(a + wd - 1, y, 1, hh); } }
+    if (s.kind === "run" && wd > 22) { ctx.fillStyle = "#fff"; ctx.font = "600 10px system-ui"; ctx.fillText(String(s.pid), a + wd / 2, y + hh / 2 + .5); }
+  }
+  axis(ctx, padL, x1, top + lanes * laneH + strip + 2, v.t0, v.t1);
+  if (playhead !== null && playhead >= v.t0 && playhead <= v.t1) {
+    const px = X(playhead); ctx.strokeStyle = "#121a2c"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, top + lanes * laneH + 2); ctx.stroke(); ctx.lineWidth = 1;
+  }
+  cv._geom = { padL, x1, top, laneH, lanes };
+}
+
+function attachGanttEvents(cv, getR, getV, setV) {
+  const tip = $("#tip"); let drag = null;
+  const tAt = (e) => { const g = cv._geom, rc = cv.getBoundingClientRect(), v = getV(); return v.t0 + (v.t1 - v.t0) * (e.clientX - rc.left - g.padL) / (g.x1 - g.padL); };
+  cv.addEventListener("wheel", (e) => {
+    e.preventDefault(); const v = getV(), t = tAt(e), f = e.deltaY > 0 ? 1.25 : 0.8;
+    setV(clampView({ t0: t - (t - v.t0) * f, t1: t + (v.t1 - t) * f }));
+  }, { passive: false });
+  cv.addEventListener("mousedown", (e) => { drag = { x: e.clientX, v: { ...getV() } }; });
+  window.addEventListener("mouseup", () => drag = null);
+  cv.addEventListener("mousemove", (e) => {
+    if (drag) {
+      const g = cv._geom, dt = (drag.v.t1 - drag.v.t0) * (e.clientX - drag.x) / (g.x1 - g.padL);
+      setV(clampView({ t0: drag.v.t0 - dt, t1: drag.v.t1 - dt })); tip.style.display = "none"; return;
+    }
+    const r = getR(), t = tAt(e), s = segAt(r.gantt, Math.floor(t));
+    if (!s || t < getV().t0) { tip.style.display = "none"; return; }
+    let html;
+    if (s.kind === "run") {
+      const w = P[s.pid], p = r.procMap[s.pid];
+      html = `<b>PID ${s.pid}</b> · ${esc(w.source)} <span class="pill ${w.malicious ? "M" : "L"}">${w.malicious ? "attack" : "legit"}</span><br>
+        ran ${s.start} → ${s.end}${r.multiLevel ? ` in Q${s.level}` : ""}<br>arrival ${w.arrival}, burst ${w.burst}, anomaly ${fmt(w.anomaly)}<br>
+        wait ${p.wait}, turnaround ${p.tat}, response ${p.resp}`;
+    } else html = s.kind === "switch" ? `Context switch ${s.start} → ${s.end}` : `CPU idle ${s.start} → ${s.end}`;
+    tip.innerHTML = html; tip.style.display = "block";
+    tip.style.left = Math.min(window.innerWidth - 310, e.clientX + 14) + "px"; tip.style.top = (e.clientY + 14) + "px";
+  });
+  cv.addEventListener("mouseleave", () => tip.style.display = "none");
+}
+function clampView(v) {
+  const max = D.makespan, span = Math.min(max, Math.max(8, v.t1 - v.t0));
+  let t0 = Math.max(0, Math.min(v.t0, max - span));
+  return { t0, t1: t0 + span };
+}
+$("#zoomFit").onclick = () => { view = { t0: 0, t1: D.makespan }; drawAllGantts(); };
+$("#zoomIn").onclick = () => { const c = (view.t0 + view.t1) / 2, h = (view.t1 - view.t0) / 3; view = clampView({ t0: c - h, t1: c + h }); drawAllGantts(); };
+$("#zoomOut").onclick = () => { const c = (view.t0 + view.t1) / 2, h = (view.t1 - view.t0); view = clampView({ t0: c - h, t1: c + h }); drawAllGantts(); };
+window.addEventListener("resize", () => { if (!D) return; drawAllGantts(); drawArrivals(); renderReplay(); });
+
+// ------------------------------------------------------------------ live replay
+const rp = { t: 0, playing: false, last: 0, acc: 0, view: { t0: 0, t1: 120 } };
+function buildReplayIndex() {
+  // queue level of every process over time, per scheduler
+  D.results.forEach((r) => {
+    r.levelEv = {};   // pid -> [[tick, level], ...]
+    if (r.securityAware) {
+      r.events.forEach((e) => { (r.levelEv[e.pid] ||= []).push([e.tick, e.to]); });
+    } else if (r.multiLevel) {
+      // classic MLFQ: level is known when it runs; it got there when its previous slice ended
+      let prevEnd = {};
+      r.gantt.forEach((s) => { if (s.kind !== "run") return;
+        const arr = (r.levelEv[s.pid] ||= []);
+        if (!arr.length || arr[arr.length - 1][1] !== s.level) arr.push([prevEnd[s.pid] ?? P[s.pid].arrival, s.level]);
+        prevEnd[s.pid] = s.end; });
+    }
+    r.evByTick = {}; r.events.forEach((e) => (r.evByTick[e.tick] ||= []).push(e));
+  });
+  $("#rpSlider").max = D.makespan;
+}
+function levelAt(r, pid, t) {
+  const a = r.levelEv[pid]; let l = 0;
+  if (a) for (const [tk, lv] of a) { if (tk <= t) l = lv; else break; }
+  return l;
+}
+function renderReplay() {
+  if (!D || !$("#t-replay").classList.contains("on")) return;
+  const r = D.results[+$("#rpSched").value], t = Math.min(rp.t, D.makespan);
+  $("#rpSlider").value = t; $("#rpTime").textContent = `t = ${t}`;
+  const s = segAt(r.gantt, t);
+  const cpu = $("#rpCpu");
+  let runningPid = null;
+  if (!s || s.kind === "idle") { cpu.className = "cpu idle"; cpu.innerHTML = `<div class="big">idle</div><div>no ready process</div>`; }
+  else if (s.kind === "switch") { cpu.className = "cpu sw"; cpu.innerHTML = `<div class="big">⇄</div><div>context switch</div><div class="hint">${s.start} → ${s.end}</div>`; }
+  else {
+    runningPid = s.pid; const w = P[s.pid];
+    cpu.className = "cpu " + (w.malicious ? "M" : "L");
+    cpu.innerHTML = `<div class="hint">CPU running</div><div class="big">P${s.pid}</div><div>${esc(w.source)}</div>
+      <div class="hint">${r.multiLevel ? "from Q" + s.level + " · " : ""}burst ${w.burst}</div>`;
+  }
+  // waiting processes
+  const waiting = r.multiLevel ? [[], [], []] : [[]];
+  let done = 0, doneL = 0;
+  for (const p of r.procs) {
+    const w = P[p.pid];
+    if (p.finish <= t) { done++; if (!w.malicious) doneL++; continue; }
+    if (w.arrival > t || p.pid === runningPid) continue;
+    const l = r.multiLevel ? Math.min(2, levelAt(r, p.pid, t)) : 0;
+    waiting[l].push(w);
+  }
+  const names = r.securityAware ? ["Q0 · Verified human (RR)", "Q1 · Suspicious (SJF)", "Q2 · Quarantine (FCFS)"]
+    : r.multiLevel ? ["Q0 · top queue", "Q1 · middle queue", "Q2 · bottom queue"] : ["Ready queue"];
+  const cols = r.multiLevel ? ["var(--q0)", "#a87505", "var(--q2)"] : ["var(--ink)"];
+  const CAP = 120;
+  $("#rpLanes").innerHTML = waiting.map((q, i) => {
+    const nl = q.filter((w) => !w.malicious).length;
+    return `<div class="lane" style="border-left:4px solid ${cols[i]}"><div class="t"><b style="color:${cols[i]}">${names[i]}</b>
+      <span>${q.length} waiting · ${nl} legit · ${q.length - nl} attack</span></div>
+      <div class="chips">${q.slice(0, CAP).map((w) => `<span class="chip ${w.malicious ? "M" : "L"}" title="${esc(w.source)}">P${w.pid}</span>`).join("")}${q.length > CAP ? `<span class="hint">+${q.length - CAP} more</span>` : ""}</div></div>`;
+  }).join("");
+  const nLegit = D.workload.filter((w) => !w.malicious).length;
+  const legitWaiting = waiting.flat().filter((w) => !w.malicious).length;
+  $("#rpStats").innerHTML = `<h3>At t = ${t}</h3>finished: <b>${done}</b> / ${r.procs.length}<br>legit finished: <b>${doneL}</b> / ${nLegit}<br>
+    legit waiting: <b class="${legitWaiting > 5 ? "bad" : ""}">${legitWaiting}</b>`;
+  // feed
+  if (r.securityAware) {
+    $("#rpFeedTitle").textContent = "Security decisions (up to this tick)";
+    const recent = r.events.filter((e) => e.tick <= t).slice(-40).reverse();
+    $("#rpFeed").innerHTML = recent.length ? recent.map((e) => `<div class="${e.tick === t ? "now" : ""}">${evLine(e)}</div>`).join("")
+      : `<span class="hint">no queue changes yet: everyone is in Q0</span>`;
+  } else {
+    $("#rpFeedTitle").textContent = "Security decisions";
+    $("#rpFeed").innerHTML = `<span class="hint">${SHORT[r.name]} has no security logic: attack requests compete with traders on equal terms.</span>`;
+  }
+  // timeline window follows playhead
+  const span = Math.min(D.makespan, 160);
+  rp.view = { t0: Math.max(0, Math.min(t - span / 2, D.makespan - span)), t1: 0 }; rp.view.t1 = rp.view.t0 + span;
+  drawGantt($("#rpGantt"), r, rp.view, t);
+}
+function evLine(e) {
+  const w = P[e.pid], q = (l) => l < 0 ? "new" : "Q" + l;
+  const verb = { arrive: "arrives straight into", demote: "demoted", promote: "promoted (aging)", boost: "anti-starvation boost", "forced-preempt": "⚡ FORCED OFF CPU →" }[e.kind] || e.kind;
+  return `t=${String(e.tick).padStart(4)}  P${e.pid} <span style="color:${w.malicious ? "var(--mal)" : "var(--legit)"}">${esc(w.source)}</span> ${e.kind === "arrive" ? verb + " " + q(e.to) : verb + " " + q(e.from) + "→" + q(e.to)}  score ${e.score.toFixed(2)}`;
+}
+$("#rpSched").onchange = renderReplay;
+$("#rpSlider").oninput = (e) => { rp.t = +e.target.value; renderReplay(); };
+$("#rpStep").onclick = () => { rp.t = Math.min(D.makespan, rp.t + 1); renderReplay(); };
+$("#rpPlay").onclick = () => {
+  rp.playing = !rp.playing; $("#rpPlay").textContent = rp.playing ? "❚❚ Pause" : "▶ Play";
+  if (rp.playing) { if (rp.t >= D.makespan) rp.t = 0; rp.last = performance.now(); rp.acc = 0; requestAnimationFrame(tick); }
+};
+function tick(now) {
+  if (!rp.playing) return;
+  rp.acc += (now - rp.last) / 1000 * 10 * +$("#rpSpeed").value; rp.last = now;   // 1x = 10 ticks/s
+  if (rp.acc >= 1) { rp.t = Math.min(D.makespan, rp.t + Math.floor(rp.acc)); rp.acc %= 1; renderReplay(); }
+  if (rp.t >= D.makespan) { rp.playing = false; $("#rpPlay").textContent = "▶ Play"; return; }
+  requestAnimationFrame(tick);
+}
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space" && $("#t-replay").classList.contains("on") && D && !/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) { e.preventDefault(); $("#rpPlay").click(); }
+});
+
+// ------------------------------------------------------------------ security
+function renderSecurity() {
+  const r = D.results.find((x) => x.securityAware), m = r.metrics;
+  const fp = m.legitThrottled + m.legitFalseQuarantine;
+  $("#secKpis").innerHTML = [
+    [`${m.botSourcesIsolated}/${m.botSources}`, "attack sources isolated"], [fmt(m.avgTimeToIsolate), "avg time-to-isolate (ticks)"],
+    [m.forcedPreemptions, "forced preemptions"], [`${m.demotions} / ${m.promotions}`, "demotions / promotions"],
+    [m.starvationBoosts, "anti-starvation boosts"], [fp, "false positives"],
+  ].map(([v, l]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+
+  const src = {};
+  D.workload.forEach((w) => {
+    const s = (src[w.source] ||= { name: w.source, n: 0, mal: w.malicious, first: w.arrival, iso: null, max: 0, peak: 0 });
+    s.n++; const p = r.procMap[w.pid]; s.max = Math.max(s.max, p.maxLevel); s.peak = Math.max(s.peak, p.peakThreat);
+  });
+  r.events.forEach((e) => { const s = src[P[e.pid].source]; if (e.to === 2 && s.iso === null) s.iso = e.tick; });
+  const list = Object.values(src).sort((a, b) => (b.mal - a.mal) || (a.first - b.first));
+  $("#srcTable").innerHTML = `<tr><th>Source</th><th>Truth</th><th>Requests</th><th>First seen</th><th>Peak score</th><th>Worst queue</th><th>Isolated at</th><th>Time to isolate</th></tr>` +
+    list.map((s) => `<tr><td>${esc(s.name)}</td><td><span class="pill ${s.mal ? "M" : "L"}">${s.mal ? "attack" : "legit"}</span></td><td>${s.n}</td><td>${s.first}</td>
+      <td>${s.peak.toFixed(2)}</td><td><span class="pill q${s.max}">Q${s.max}</span></td><td>${s.iso ?? "–"}</td><td>${s.iso !== null ? s.iso - s.first : "–"}</td></tr>`).join("");
+  renderEvents();
+}
+function renderEvents() {
+  const r = D.results.find((x) => x.securityAware), k = $("#evFilter").value, c = $("#evClass").value;
+  const ev = r.events.filter((e) => (!k || e.kind === k) && (!c || (P[e.pid].malicious ? "M" : "L") === c));
+  $("#evCount").textContent = `${ev.length} events`;
+  const q = (l) => l < 0 ? "–" : `<span class="pill q${l}">Q${l}</span>`;
+  $("#evTable").innerHTML = `<tr><th>Tick</th><th>PID</th><th style="text-align:left">Source</th><th>Event</th><th>From</th><th>To</th><th>Score</th></tr>` +
+    ev.slice(0, 1500).map((e) => { const w = P[e.pid];
+      return `<tr><td>${e.tick}</td><td>${e.pid}</td><td style="text-align:left"><span class="pill ${w.malicious ? "M" : "L"}">${esc(w.source)}</span></td>
+      <td>${e.kind}</td><td>${q(e.from)}</td><td>${q(e.to)}</td><td>${e.score.toFixed(3)}</td></tr>`; }).join("");
+}
+$("#evFilter").onchange = renderEvents; $("#evClass").onchange = renderEvents;
+
+// ------------------------------------------------------------------ processes
+let prSort = { k: "pid", dir: 1 };
+function renderProcs() {
+  const r = D.results[+$("#prSched").value], c = $("#prClass").value, q = $("#prSearch").value.trim().toLowerCase();
+  const cols = [["pid", "PID"], ["source", "Source"], ["truth", "Truth"], ["arrival", "Arrival"], ["burst", "Burst"], ["anomaly", "Anomaly"],
+    ["start", "Start"], ["finish", "Finish"], ["wait", "Wait"], ["tat", "Turnaround"], ["resp", "Response"]];
+  if (r.multiLevel) cols.push(["maxLevel", "Worst queue"]);
+  if (r.securityAware) cols.push(["peakThreat", "Peak score"], ["demotions", "Demotions"]);
+  let rows = r.procs.map((p) => ({ ...p, ...P[p.pid], truth: P[p.pid].malicious ? 1 : 0 }))
+    .filter((p) => (!c || (p.malicious ? "M" : "L") === c) && (!q || p.source.toLowerCase().includes(q)));
+  rows.sort((a, b) => (a[prSort.k] > b[prSort.k] ? 1 : a[prSort.k] < b[prSort.k] ? -1 : a.pid - b.pid) * prSort.dir);
+  $("#prCount").textContent = `${rows.length} processes`;
+  const cell = (p, k) => k === "truth" ? `<span class="pill ${p.malicious ? "M" : "L"}">${p.malicious ? "attack" : "legit"}</span>`
+    : k === "maxLevel" ? `<span class="pill q${p.maxLevel}">Q${p.maxLevel}</span>` : k === "source" ? esc(p.source)
+    : k === "anomaly" || k === "peakThreat" ? p[k].toFixed(2) : p[k];
+  $("#prTable").innerHTML = `<tr>${cols.map(([k, l]) => `<th class="sort" data-k="${k}">${l}${prSort.k === k ? (prSort.dir > 0 ? " ▲" : " ▼") : ""}</th>`).join("")}</tr>` +
+    rows.slice(0, 2000).map((p) => `<tr>${cols.map(([k]) => `<td>${cell(p, k)}</td>`).join("")}</tr>`).join("");
+  $$("#prTable th.sort").forEach((th) => th.onclick = () => { prSort = { k: th.dataset.k, dir: prSort.k === th.dataset.k ? -prSort.dir : 1 }; renderProcs(); });
+}
+$("#prSched").onchange = renderProcs; $("#prClass").onchange = renderProcs; $("#prSearch").oninput = renderProcs;
+
+// ------------------------------------------------------------------ scenarios
+function getPath(o, p) { return p.split(".").reduce((a, k) => a[k], o); }
+function renderScenarios() {
+  $("#sc-empty").style.display = "none"; $("#sc").style.display = "";
+  const metric = $("#scMetric").value, log = $("#scLog").checked;
+  const scen = S.scenarios, names = scen[0].metrics.map((m) => m.scheduler);
+  const W = 820, H = 300, padL = 56, padB = 34, padT = 12;
+  const vals = scen.flatMap((s) => s.metrics.map((m) => getPath(m, metric)));
+  const vmax = Math.max(1, ...vals), lmin = 0, lmax = Math.log10(vmax * 1.3);
+  const Y = (v) => log ? (H - padB) - (H - padB - padT) * (Math.log10(Math.max(1, v)) - lmin) / (lmax - lmin)
+                       : (H - padB) - (H - padB - padT) * v / (vmax * 1.1);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%">`;
+  const ticks = log ? [1, 10, 100, 1000, 10000].filter((t) => t <= vmax * 1.3) : [0, .25, .5, .75, 1].map((f) => Math.round(vmax * 1.1 * f));
+  ticks.forEach((t) => svg += `<line x1="${padL}" x2="${W - 8}" y1="${Y(t)}" y2="${Y(t)}" stroke="#eef0f4"/><text x="${padL - 6}" y="${Y(t)}" text-anchor="end" font-size="11" fill="#667085" dominant-baseline="middle">${t}</text>`);
+  const gw = (W - padL - 8) / scen.length, bw = Math.min(40, (gw - 24) / names.length);
+  scen.forEach((s, i) => {
+    const gx = padL + i * gw + (gw - bw * names.length) / 2;
+    s.metrics.forEach((m, j) => {
+      const v = getPath(m, metric), y = Y(v);
+      svg += `<rect x="${gx + j * bw + 2}" y="${y}" width="${bw - 4}" height="${Math.max(1, H - padB - y)}" rx="3" fill="${SCOLORS[j]}"><title>${SHORT[m.scheduler]}: ${fmt(v)}</title></rect>`;
+      svg += `<text x="${gx + j * bw + bw / 2}" y="${y - 4}" text-anchor="middle" font-size="10" fill="#444">${fmt(v, v < 100 ? 1 : 0)}</text>`;
+    });
+    svg += `<text x="${padL + i * gw + gw / 2}" y="${H - 12}" text-anchor="middle" font-size="13" font-weight="600">${s.attack}</text>`;
+  });
+  $("#scChart").innerHTML = svg + "</svg>";
+  $("#scLegend").innerHTML = names.map((n, j) => `<span><i style="background:${SCOLORS[j]}"></i>${SHORT[n]}</span>`).join("");
+  let h = `<tr><th>Scenario</th><th>Scheduler</th><th>Legit avg wait</th><th>Legit P95</th><th>Attack avg wait</th><th>Throughput</th><th>CPU %</th><th>Ctx switches</th><th>Isolated</th><th>False pos.</th></tr>`;
+  scen.forEach((s) => s.metrics.forEach((m, j) => {
+    h += `<tr><td>${j === 0 ? `<b>${s.attack}</b>` : ""}</td><td style="text-align:left">${SHORT[m.scheduler]}</td><td class="${m.securityAware ? "best" : ""}">${fmt(m.legit.avgWait)}</td>
+      <td>${fmt(m.legit.p95Wait)}</td><td>${fmt(m.malicious.avgWait)}</td><td>${fmt(m.throughput)}</td><td>${fmt(m.cpuUtilization)}</td><td>${m.contextSwitches}</td>
+      <td>${m.securityAware ? `${m.botSourcesIsolated}/${m.botSources}` : "–"}</td><td>${m.securityAware ? m.legitThrottled + m.legitFalseQuarantine : "–"}</td></tr>`;
+  }));
+  $("#scTable").innerHTML = h;
+}
+$("#scMetric").onchange = renderScenarios; $("#scLog").onchange = renderScenarios;
+
+// ------------------------------------------------------------------ custom workload editor
+const EX_B = [["L1", 0, 4, 0, 0], ["BOT", 1, 3, .5, 1], ["BOT", 2, 3, .5, 1], ["L2", 3, 2, 0, 0], ["BOT", 4, 2, .5, 1], ["L3", 5, 3, 0, 0]];
+const EX_A = [["A", 0, 5, 0, 0], ["B", 1, 3, 0, 0], ["C", 2, 1, 0, 0], ["D", 3, 2, 0, 0], ["E", 4, 4, 0, 0]];
+const DEFAULT_CUSTOM = [["TRADER-1", 0, 5, .05, 0], ["TRADER-2", 2, 4, .08, 0], ["BOT-IP", 3, 2, .7, 1], ["BOT-IP", 4, 2, .7, 1], ["BOT-IP", 5, 2, .75, 1],
+  ["TRADER-3", 6, 3, .02, 0], ["BOT-IP", 6, 2, .7, 1], ["BOT-IP", 7, 2, .8, 1], ["BOT-IP", 8, 2, .7, 1], ["TRADER-1", 10, 4, .05, 0], ["TRADER-4", 12, 3, .1, 0]];
+function setCustom(rows) {
+  $("#cuBody").innerHTML = "";
+  rows.forEach((r) => addCustomRow(...r));
+}
+function addCustomRow(src = "TRADER-X", arr = 0, burst = 3, anom = 0.05, mal = 0) {
+  const tr = el("tr");
+  tr.innerHTML = `<td class="pid"></td><td><input type="text" value="${esc(src)}"></td><td><input type="number" min="0" value="${arr}"></td>
+    <td><input type="number" min="1" value="${burst}"></td><td><input type="number" min="0" max="1" step="0.05" value="${anom}"></td>
+    <td style="text-align:center"><input type="checkbox" ${mal ? "checked" : ""}></td><td><button title="remove">✕</button></td>`;
+  tr.querySelector("button").onclick = () => { tr.remove(); renumber(); };
+  $("#cuBody").appendChild(tr); renumber();
+}
+function renumber() { $$("#cuBody tr").forEach((tr, i) => tr.querySelector(".pid").textContent = i + 1); }
+function customRows() {
+  return $$("#cuBody tr").map((tr) => { const i = tr.querySelectorAll("input");
+    return { source: i[0].value, arrival: i[1].value, burst: i[2].value, anomaly: i[3].value, malicious: i[4].checked }; });
+}
+$("#cuExB").onclick = () => { setCustom(EX_B); $("#handCfg").checked = true; syncHand(); };
+$("#cuExA").onclick = () => { setCustom(EX_A); $("#handCfg").checked = true; syncHand(); };
+$("#cuAdd").onclick = () => { const rows = customRows(); const last = rows.length ? +rows[rows.length - 1].arrival + 1 : 0; addCustomRow("TRADER-X", last, 3, 0.05, 0); };
+$("#cuClear").onclick = () => setCustom([]);
+$("#cuBot").onclick = () => {
+  const rows = customRows(), start = rows.length ? Math.max(...rows.map((r) => +r.arrival)) - 2 : 0, n = $$("#cuBody tr").length;
+  const name = "BOT-" + (1 + new Set(rows.filter((r) => /^BOT/.test(r.source)).map((r) => r.source)).size);
+  for (let k = 0; k < 6; k++) addCustomRow(name, Math.max(0, start + k), 2, 0.7, 1);
+};
+$("#cuRun").onclick = () => {
+  source = "custom";
+  $$("#srcSeg button").forEach((x) => x.classList.toggle("on", x.dataset.v === "custom"));
+  ["generate", "file", "custom"].forEach((k) => $("#src-" + k).style.display = k === "custom" ? "" : "none");
+  runCompare().then(() => showTab("replay")).catch(() => {});
+};
+setCustom(DEFAULT_CUSTOM);
+
+// ------------------------------------------------------------------ boot
+fetch("/api/workloads").then((r) => r.json()).then((list) => {
+  $("#file").innerHTML = list.map((w) => `<option value="${w.name}">${w.name} (${w.processes})</option>`).join("");
+}).catch(() => {});
+// ?autorun[&tab=replay&t=300] runs a comparison as soon as the page opens
+const QS = new URLSearchParams(location.search);
+window.addEventListener("error", (e) => { $("#err").appendChild(el("div", { className: "err" }, "JS error: " + esc(e.message))); });
+if (QS.get("tab") && !QS.has("autorun")) showTab(QS.get("tab"));
+if (QS.has("customrun")) setTimeout(() => $("#cuRun").click(), 50);
+if (QS.has("scen")) setTimeout(() => $("#runScen").click(), 50);
+if (QS.has("autorun")) setTimeout(() => runCompare().then(() => {
+  if (QS.get("t")) rp.t = +QS.get("t");
+  if (QS.get("tab")) showTab(QS.get("tab"));
+}).catch(() => {}), 50);
+fillConfig({ quantum: 2, wVelocity: .45, wFrequency: .2, wAnomaly: .35, windowTicks: 50, velocityCap: .12, frequencyCap: 20,
+  maliciousThreshold: .55, suspiciousThreshold: .3, promotionAgingTicks: 100, rehabCeiling: 1, starvationLimit: 400 });
+</script>
+</body>
+</html>

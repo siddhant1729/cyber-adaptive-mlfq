@@ -51,6 +51,16 @@ struct GanttSegment {
     Tick end;     // exclusive
 };
 
+// One security decision taken by the adaptive scheduler (for the web UI log).
+struct SecurityEvent {
+    Tick        tick;
+    int         pid;
+    int         fromLevel;
+    int         toLevel;
+    std::string kind;    // "arrive" | "demote" | "promote" | "boost" | "forced-preempt"
+    double      score;   // source threat score at that moment
+};
+
 // Everything one simulation run produces. Analytics turns this into metrics.
 struct SimResult {
     std::string name;                 // e.g. "FCFS", "Adaptive-MLFQ"
@@ -72,6 +82,7 @@ struct SimResult {
     long long demotions  = 0;
     long long promotions = 0;
     long long starvationBoosts = 0;
+    std::vector<SecurityEvent> events; // adaptive only: every queue-level decision
 };
 
 class Scheduler {

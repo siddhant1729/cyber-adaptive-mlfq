@@ -2,6 +2,7 @@
 #   make          build ./cmlfq
 #   make test     build and run the unit tests
 #   make run      run a full comparison on a generated mixed attack
+#   make ui       start the web UI at http://localhost:8000
 #   make clean    remove build artefacts
 
 CXX      := g++
@@ -19,7 +20,7 @@ LIB_OBJS  := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(LIB_SRCS))
 MAIN_OBJ  := $(BUILD_DIR)/main.o
 TEST_OBJ  := $(BUILD_DIR)/test_main.o
 
-.PHONY: all test run scenarios clean
+.PHONY: all test run scenarios ui clean
 
 all: $(TARGET)
 
@@ -43,6 +44,9 @@ run: $(TARGET)
 
 scenarios: $(TARGET)
 	./$(TARGET) --generate --legit 50 --bots 200 --seed 42 --scenarios
+
+ui: $(TARGET)
+	python3 ui/server.py
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)

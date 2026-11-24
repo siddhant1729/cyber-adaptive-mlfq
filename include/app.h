@@ -26,6 +26,7 @@ struct Options {
     bool        configExplicit = false;
     std::string workloadFile;
     std::string saveWorkloadFile;
+    std::string jsonFile;            // --json FILE: machine-readable output for the web UI
     bool        generate = false;
     GenerationParams gen;            // legit, bots, seed, attack
     std::string scheduler = "adaptive";

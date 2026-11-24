@@ -75,7 +75,7 @@ private:
     };
 
     void place(PCB* p, Tick now);                     // push into the queue for p->queueLevel
-    void changeLevel(PCB* p, int newLevel, Tick now); // bookkeeping for demotion/promotion
+    void changeLevel(PCB* p, int newLevel, Tick now, const char* kind = nullptr); // bookkeeping for demotion/promotion
     void applyAssessment(PCB* p, const ThreatAssessment& a);
     void rebuildQueues(Tick now);                     // re-place every ready process
 
